@@ -1,0 +1,31 @@
+[project]
+name = "retail-power-book"
+version = "0.0.1"
+description = "Simulation and hedging framework for a German retail power supply book, built with ALM methods."
+readme = "README.md"
+license = "MIT"
+authors = [
+    { name = "Niklas Avermann", email = "62937952+AutoNaver@users.noreply.github.com" }
+]
+requires-python = ">=3.12"
+dependencies = []
+
+[build-system]
+requires = ["uv_build>=0.12.18,<0.13.0"]
+build-backend = "uv_build"
+
+[tool.uv.build-backend]
+module-name = "rpb"
+
+[tool.ruff]
+line-length = 100
+target-version = "py312"
+
+[dependency-groups]
+dev = [
+    "hypothesis>=6.168.1",
+    "nbstripout>=0.9.1",
+    "pre-commit>=4.6.2",
+    "pytest>=9.1.1",
+    "ruff>=0.16.8",
+]
