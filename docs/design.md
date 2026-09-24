@@ -67,7 +67,7 @@ L[s, h] = N_customers · E_annual[s] · shape_h · (1 + ε[s, h])
 
 - `N_customers`: fixed per run. Churn is out of scope.
 - `E_annual[s]`: annual consumption per customer in MWh under normal weather, stochastic across paths.
-- `shape_h`: the BDEW household profile H25, including its dynamisation, summed from quarter-hours to hours and normalised to sum to 1 over the delivery period. It comes from the `demandlib` package (MIT). BDEW publishes the profiles without a licence, so we don't commit copies of the data; tests use the profile from the installed package. Holidays passed to the profile are the nationwide ones from `rpb.holidays`.
+- `shape_h`: the BDEW household profile H25, including its dynamisation, summed from quarter-hours to hours and normalised to sum to 1 over each local calendar year, so a delivery month gets its real share of `E_annual`. It comes from the `demandlib` package (MIT). BDEW publishes the profiles without a licence, so we don't commit copies of the data; tests use the profile from the installed package. Holidays passed to the profile are the nationwide ones from `rpb.holidays`.
 - `ε[s, h]`: the hourly deviation from the profile caused by weather:
 
   ```
