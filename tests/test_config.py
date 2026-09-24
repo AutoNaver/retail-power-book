@@ -5,6 +5,8 @@ import pytest
 from rpb.config import ConfigError, entsoe_token, load_config
 
 TOKEN_VAR = "ENTSOE_API_TOKEN"
+WEATHER = '[weather.stations]\n"00433" = 0.25\n"01975" = 0.75\n'
+BASE = '[data]\ncache_dir = "c"\n[market]\nbidding_zone = "DE-LU"\n'
 
 
 def write_config(directory: Path, text: str) -> Path:
@@ -15,17 +17,19 @@ def write_config(directory: Path, text: str) -> Path:
 
 def test_values_and_relative_path_resolution(tmp_path: Path) -> None:
     path = write_config(
-        tmp_path, '[data]\ncache_dir = "../cache"\n[market]\nbidding_zone = "DE-LU"\n'
+        tmp_path, '[data]\ncache_dir = "../cache"\n[market]\nbidding_zone = "DE-LU"\n' + WEATHER
     )
     config = load_config(path)
     assert config.data.cache_dir == (tmp_path.parent / "cache").resolve()
     assert config.market.bidding_zone == "DE-LU"
+    assert config.weather.stations == {"00433": 0.25, "01975": 0.75}
 
 
 def test_absolute_path_is_kept(tmp_path: Path) -> None:
     cache = tmp_path / "abs"
     path = write_config(
-        tmp_path, f'[data]\ncache_dir = "{cache.as_posix()}"\n[market]\nbidding_zone = "DE-LU"\n'
+        tmp_path,
+        f'[data]\ncache_dir = "{cache.as_posix()}"\n[market]\nbidding_zone = "DE-LU"\n' + WEATHER,
     )
     assert load_config(path).data.cache_dir == cache
 
@@ -88,3 +92,25 @@ def test_non_string_cache_dir_raises(tmp_path: Path) -> None:
     path = write_config(tmp_path, '[data]\ncache_dir = 3\n[market]\nbidding_zone = "DE-LU"\n')
     with pytest.raises(ConfigError, match="data.cache_dir"):
         load_config(path)
+
+
+def test_default_config_station_weights_sum_to_one() -> None:
+    stations = load_config().weather.stations
+    assert len(stations) == 10
+    assert sum(stations.values()) == pytest.approx(1.0)
+
+
+@pytest.mark.parametrize(
+    ("weather", "message"),
+    [
+        ("", "weather.stations"),
+        ("[weather]\nstations = {}\n", "non-empty"),
+        ('[weather.stations]\n"433" = 1.0\n', "5 digits"),
+        ('[weather.stations]\n"00433" = 0.5\n"01975" = 0.4\n', "sum to 1"),
+        ('[weather.stations]\n"00433" = 1.5\n"01975" = -0.5\n', "> 0"),
+        ('[weather.stations]\n"00433" = "1"\n', "> 0"),
+    ],
+)
+def test_invalid_station_weights_raise(tmp_path: Path, weather: str, message: str) -> None:
+    with pytest.raises(ConfigError, match=message):
+        load_config(write_config(tmp_path, BASE + weather))
