@@ -75,9 +75,17 @@ L[s, h] = N_customers · E_annual[s] · shape_h · (1 + ε[s, h])
   ΔT[s, h] = T[s, h] − T_normal(h)
   ```
 
-  `T` is an hourly German temperature in °C: a weighted average of DWD stations, with the station list and weights in `configs/`. `T_normal` is its climatological normal for that local day of year and hour, estimated from history. `g` is a temperature response with `g(0) = 0`, so normal weather reproduces the profile. `η` is a small mean-zero hourly residual.
+  `T` is an hourly German temperature in °C: a weighted average of DWD stations, with the station list and weights in `configs/`. `T_normal` is its climatological normal for that calendar day and hour in standard time (see below), estimated from history. `g` is a temperature response with `g(0) = 0`, so normal weather reproduces the profile. `η` is a small mean-zero hourly residual.
 
-**Weather scenarios**: each path gets a historical weather year, mapped onto the delivery calendar by local day of year and hour. This keeps the real persistence of cold spells and heat waves, which a simple noise process wouldn't. Mapping onto a different calendar year shifts weekdays; that's fine for temperature, because day-type effects live in `shape_h`.
+**Weather scenarios**: each path gets a historical weather year. This keeps the real persistence of cold spells and heat waves, which a simple noise process wouldn't.
+
+The mapping from delivery hours to weather hours uses **standard time, UTC+1 all year (MEZ, no DST)**, not local clock time. In standard time every day has exactly 24 hours, so there are no DST gaps or repeated hours, and it tracks the sun, which suits temperature. For each delivery hour:
+
+1. Convert its UTC start to UTC+1 and take the calendar month, day and hour.
+2. Take the weather year's observation at the same month, day and hour in UTC+1.
+3. Leap days: a delivery 29 February uses the weather year's 28 February when the weather year has no 29 February. A weather year's 29 February is unused when the delivery year has none.
+
+Every delivery hour gets exactly one weather hour, with nothing dropped, duplicated or filled. Weekdays shift between the two years; that's fine for temperature, because day-type effects live in `shape_h`. Missing weather observations stay NaN, and the load model decides how to handle them.
 
 Functions accept a `numpy.random.Generator`. A deterministic path (normal weather, no residual) must reproduce `N_customers · E_annual · shape_h` exactly, and tests check that.
 
