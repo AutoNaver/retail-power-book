@@ -145,9 +145,11 @@ def load_station_temperature(
     if start != start.floor("h") or end != end.floor("h") or end <= start:
         raise ValueError("start and end must be full hours with end after start")
 
-    # Local station days can differ from UTC days by at most one.
-    first_day = int((start - pd.Timedelta(days=1)).strftime("%Y%m%d"))
-    last_day = int((end + pd.Timedelta(days=1)).strftime("%Y%m%d"))
+    # Station days that can map into [start, end): in UTC basis the dates of start to
+    # end - 1h; in MEZ (UTC+1) the dates of start + 1h to end. Parsing only these days
+    # keeps an ambiguous time-basis day just outside the range from raising.
+    first_day = int(start.strftime("%Y%m%d"))
+    last_day = int(end.strftime("%Y%m%d"))
 
     name = _historical_name(station_id, fetch(f"{BASE_URL}/historical/").decode())
     path = cache_dir / "dwd" / name
@@ -160,8 +162,10 @@ def load_station_temperature(
     series = parse_station_zip(historical_zip, first_day, last_day)
 
     # The historical file name ends with its last day; recent data is used only after it.
+    # Recent files are in UTC basis, so they are needed only if the last requested hour's
+    # UTC date is after that day.
     historical_last_day = int(name.split("_")[-2])
-    if last_day > historical_last_day:
+    if int((end - pd.Timedelta(hours=1)).strftime("%Y%m%d")) > historical_last_day:
         recent_zip = fetch(f"{BASE_URL}/recent/stundenwerte_TU_{station_id}_akt.zip")
         recent = parse_station_zip(recent_zip, max(first_day, historical_last_day + 1), last_day)
         series = pd.concat([series, recent])
@@ -195,8 +199,8 @@ def weighted_temperature(
 
     frame = pd.DataFrame(dict(station_temperatures))
     w = pd.Series(weights, dtype=float)[frame.columns].to_numpy()
-    if (w <= 0).any():
-        raise ValueError("station weights must be > 0")
+    if not np.isfinite(w).all() or (w <= 0).any():
+        raise ValueError("station weights must be finite and > 0")
     w = w / w.sum()
 
     values = frame.to_numpy(dtype=float)

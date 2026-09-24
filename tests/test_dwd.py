@@ -252,3 +252,39 @@ def test_weighted_temperature_needs_matching_stations() -> None:
         weighted_temperature(
             {"00433": pd.Series([1.0], index=index)}, {"01975": 1.0}, min_reporting_weight=0.8
         )
+
+
+def test_range_starting_after_a_conflicting_day_loads(tmp_path: Path) -> None:
+    # 1995-02-01 is claimed by both MEZ and UTC here; a range from the next UTC day is unambiguous.
+    content = rewrite_metadata(HIST_ZIP, b"19510101;19950131", b"19510101;19950201")
+
+    class Fetch(FakeDwd):
+        def __call__(self, url: str) -> bytes:
+            return content if url.endswith(HIST_NAME) else super().__call__(url)
+
+    # The old one-day padding parsed 1995-02-01 for this range and raised.
+    temps = load_station_temperature(
+        "00433", utc("1995-02-02 00:00"), utc("1995-02-02 06:00"), tmp_path, fetch=Fetch()
+    )
+    assert len(temps) == 6  # the trimmed fixture has no rows that day, so all NaN
+    with pytest.raises(ValueError, match="conflicting"):
+        load_station_temperature(
+            "00433", utc("1995-02-01 00:00"), utc("1995-02-01 06:00"), tmp_path, fetch=Fetch()
+        )
+
+
+def test_last_historical_hour_does_not_fetch_recent(tmp_path: Path) -> None:
+    fetch = FakeDwd()
+    temps = load_station_temperature(
+        "00433", utc("2025-12-31 22:00"), utc("2026-01-01 00:00"), tmp_path, fetch=fetch
+    )
+    assert not any("/recent/" in url for url in fetch.urls)
+    np.testing.assert_allclose(temps.to_numpy(), [3.3, 3.5])
+
+
+@pytest.mark.parametrize("bad", [np.nan, np.inf])
+def test_non_finite_weight_raises(bad: float) -> None:
+    index = pd.date_range("2025-01-01", periods=1, freq="h", tz="UTC")
+    temps = {"00001": pd.Series([1.0], index=index), "00002": pd.Series([2.0], index=index)}
+    with pytest.raises(ValueError, match="finite"):
+        weighted_temperature(temps, {"00001": 0.5, "00002": bad}, min_reporting_weight=0.8)
