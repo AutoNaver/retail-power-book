@@ -33,6 +33,7 @@ class MarketConfig:
 @dataclass(frozen=True)
 class WeatherConfig:
     stations: dict[str, float]  # DWD station id (5 digits) -> weight; weights sum to 1
+    min_reporting_weight: float  # share of weight that must report for an hourly average
 
 
 @dataclass(frozen=True)
@@ -74,6 +75,13 @@ def _station_weights(raw: dict[str, Any], path: Path) -> dict[str, float]:
     return weights
 
 
+def _min_reporting_weight(raw: dict[str, Any], path: Path) -> float:
+    value = _require(raw, "weather.min_reporting_weight", path)
+    if isinstance(value, bool) or not isinstance(value, int | float) or not 0 < value <= 1:
+        raise ConfigError(f"'weather.min_reporting_weight' in {path} must be in (0, 1]")
+    return float(value)
+
+
 def load_config(path: Path | None = None) -> Config:
     """Load a TOML config; relative paths resolve against the file's directory.
 
@@ -98,7 +106,10 @@ def load_config(path: Path | None = None) -> Config:
     return Config(
         data=DataConfig(cache_dir=cache_dir),
         market=MarketConfig(bidding_zone=bidding_zone),
-        weather=WeatherConfig(stations=_station_weights(raw, path)),
+        weather=WeatherConfig(
+            stations=_station_weights(raw, path),
+            min_reporting_weight=_min_reporting_weight(raw, path),
+        ),
     )
 
 

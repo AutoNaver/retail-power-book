@@ -190,15 +190,65 @@ def test_weighted_temperature_known_result() -> None:
     index = pd.date_range("2025-01-01", periods=3, freq="h", tz="UTC")
     temps = {
         "00433": pd.Series([0.0, 4.0, 8.0], index=index),
-        "01975": pd.Series([4.0, 8.0, np.nan], index=index),
+        "01975": pd.Series([4.0, 8.0, 12.0], index=index),
     }
-    result = weighted_temperature(temps, {"00433": 0.25, "01975": 0.75})
-    np.testing.assert_allclose(result.to_numpy()[:2], [3.0, 7.0])
-    assert np.isnan(result.iloc[2])  # a missing station is not silently dropped
+    result = weighted_temperature(temps, {"00433": 0.25, "01975": 0.75}, min_reporting_weight=0.8)
+    np.testing.assert_allclose(result.to_numpy(), [3.0, 7.0, 11.0])
     assert result.name == "temperature_c"
+    assert str(result.index.tz) == "UTC"
+
+
+def test_missing_station_rescales_weights_above_threshold() -> None:
+    index = pd.date_range("2025-01-01", periods=3, freq="h", tz="UTC")
+    temps = {
+        "00001": pd.Series([10.0, 10.0, np.nan], index=index),
+        "00002": pd.Series([20.0, np.nan, 20.0], index=index),
+        "00003": pd.Series([30.0, 30.0, 30.0], index=index),
+    }
+    weights = {"00001": 0.1, "00002": 0.2, "00003": 0.7}
+    result = weighted_temperature(temps, weights, min_reporting_weight=0.8)
+    # Hour 0: all report, 1 + 4 + 21 = 26.
+    # Hour 1: 00002 missing, reporting weight 0.8 >= 0.8, (1 + 21) / 0.8 = 27.5.
+    # Hour 2: 00001 missing, reporting weight 0.9, (4 + 21) / 0.9 = 27.78.
+    np.testing.assert_allclose(result.to_numpy(), [26.0, 27.5, 25.0 / 0.9])
+
+    strict = weighted_temperature(temps, weights, min_reporting_weight=0.85)
+    assert np.isnan(strict.iloc[1])  # 0.8 of the weight is below 0.85
+    assert strict.iloc[2] == pytest.approx(25.0 / 0.9)
+
+
+def test_all_stations_missing_is_nan() -> None:
+    index = pd.date_range("2025-01-01", periods=1, freq="h", tz="UTC")
+    temps = {"00001": pd.Series([np.nan], index=index), "00002": pd.Series([np.nan], index=index)}
+    result = weighted_temperature(temps, {"00001": 0.5, "00002": 0.5}, min_reporting_weight=0.1)
+    assert np.isnan(result.iloc[0])
+
+
+@pytest.mark.parametrize("tz", [None, "Europe/Berlin"])
+def test_weighted_temperature_rejects_non_utc_index(tz: str | None) -> None:
+    index = pd.date_range("2025-03-30", periods=4, freq="h", tz=tz)
+    temps = {"00433": pd.Series(1.0, index=index)}
+    with pytest.raises(ValueError, match="station 00433.*UTC"):
+        weighted_temperature(temps, {"00433": 1.0}, min_reporting_weight=0.8)
+
+
+def test_weighted_temperature_rejects_infinite_values() -> None:
+    index = pd.date_range("2025-01-01", periods=2, freq="h", tz="UTC")
+    temps = {"00433": pd.Series([1.0, np.inf], index=index)}
+    with pytest.raises(ValueError, match="finite"):
+        weighted_temperature(temps, {"00433": 1.0}, min_reporting_weight=0.8)
+
+
+@pytest.mark.parametrize("min_weight", [0.0, 1.2])
+def test_invalid_min_reporting_weight_raises(min_weight: float) -> None:
+    index = pd.date_range("2025-01-01", periods=1, freq="h", tz="UTC")
+    with pytest.raises(ValueError, match="min_reporting_weight"):
+        weighted_temperature({"00433": pd.Series([1.0], index=index)}, {"00433": 1.0}, min_weight)
 
 
 def test_weighted_temperature_needs_matching_stations() -> None:
     index = pd.date_range("2025-01-01", periods=1, freq="h", tz="UTC")
     with pytest.raises(ValueError, match="same station ids"):
-        weighted_temperature({"00433": pd.Series([1.0], index=index)}, {"01975": 1.0})
+        weighted_temperature(
+            {"00433": pd.Series([1.0], index=index)}, {"01975": 1.0}, min_reporting_weight=0.8
+        )

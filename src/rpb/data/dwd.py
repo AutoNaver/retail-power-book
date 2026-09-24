@@ -24,6 +24,8 @@ from pathlib import Path
 import numpy as np
 import pandas as pd
 
+from rpb.timeutils import require_utc
+
 BASE_URL = (
     "https://opendata.dwd.de/climate_environment/CDC/observations_germany/climate/hourly/"
     "air_temperature"
@@ -169,16 +171,39 @@ def load_station_temperature(
 
 
 def weighted_temperature(
-    station_temperatures: Mapping[str, pd.Series], weights: Mapping[str, float]
+    station_temperatures: Mapping[str, pd.Series],
+    weights: Mapping[str, float],
+    min_reporting_weight: float,
 ) -> pd.Series:
-    """Weighted average temperature in °C across stations.
+    """Weighted average temperature in °C across stations, per UTC hour.
 
-    An hour is NaN if any station is missing it: weights are never renormalised
-    over the stations that happen to report.
+    When some stations are missing an hour, the average uses the stations that
+    reported, with their weights rescaled to sum to 1, provided they carry at least
+    `min_reporting_weight` of the total weight. Otherwise the hour is NaN.
     """
     if set(station_temperatures) != set(weights):
         raise ValueError("stations and weights must have the same station ids")
+    if not 0.0 < min_reporting_weight <= 1.0:
+        raise ValueError(f"min_reporting_weight must be in (0, 1], got {min_reporting_weight}")
+    for station_id, series in station_temperatures.items():
+        try:
+            require_utc(series.index)
+        except ValueError as error:
+            raise ValueError(f"station {station_id}: {error}") from error
+        if np.isinf(series.to_numpy(dtype=float)).any():
+            raise ValueError(f"station {station_id}: temperatures must be finite or NaN")
+
     frame = pd.DataFrame(dict(station_temperatures))
-    w = pd.Series(weights)[frame.columns]
-    values = frame.to_numpy() @ w.to_numpy()  # NaN in any station gives NaN for that hour
-    return pd.Series(values, index=frame.index, name="temperature_c")
+    w = pd.Series(weights, dtype=float)[frame.columns].to_numpy()
+    if (w <= 0).any():
+        raise ValueError("station weights must be > 0")
+    w = w / w.sum()
+
+    values = frame.to_numpy(dtype=float)
+    reporting = ~np.isnan(values)
+    reporting_weight = reporting @ w
+    weighted_sum = np.where(reporting, values, 0.0) @ w
+    enough = reporting_weight >= min_reporting_weight - 1e-12
+    result = np.full(len(frame), np.nan)
+    result[enough] = weighted_sum[enough] / reporting_weight[enough]
+    return pd.Series(result, index=frame.index.tz_convert("UTC"), name="temperature_c")

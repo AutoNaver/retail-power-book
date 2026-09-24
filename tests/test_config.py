@@ -5,7 +5,9 @@ import pytest
 from rpb.config import ConfigError, entsoe_token, load_config
 
 TOKEN_VAR = "ENTSOE_API_TOKEN"
-WEATHER = '[weather.stations]\n"00433" = 0.25\n"01975" = 0.75\n'
+WEATHER = (
+    '[weather]\nmin_reporting_weight = 0.8\n[weather.stations]\n"00433" = 0.25\n"01975" = 0.75\n'
+)
 BASE = '[data]\ncache_dir = "c"\n[market]\nbidding_zone = "DE-LU"\n'
 
 
@@ -23,6 +25,7 @@ def test_values_and_relative_path_resolution(tmp_path: Path) -> None:
     assert config.data.cache_dir == (tmp_path.parent / "cache").resolve()
     assert config.market.bidding_zone == "DE-LU"
     assert config.weather.stations == {"00433": 0.25, "01975": 0.75}
+    assert config.weather.min_reporting_weight == 0.8
 
 
 def test_absolute_path_is_kept(tmp_path: Path) -> None:
@@ -114,3 +117,13 @@ def test_default_config_station_weights_sum_to_one() -> None:
 def test_invalid_station_weights_raise(tmp_path: Path, weather: str, message: str) -> None:
     with pytest.raises(ConfigError, match=message):
         load_config(write_config(tmp_path, BASE + weather))
+
+
+@pytest.mark.parametrize(
+    ("value", "message"), [("", "min_reporting_weight"), ("0", "(0, 1]"), ("1.5", "(0, 1]")]
+)
+def test_invalid_min_reporting_weight_raises(tmp_path: Path, value: str, message: str) -> None:
+    line = f"min_reporting_weight = {value}\n" if value else ""
+    text = BASE + f'[weather]\n{line}[weather.stations]\n"00433" = 1.0\n'
+    with pytest.raises(ConfigError, match=message.replace("(", r"\(").replace("]", r"\]")):
+        load_config(write_config(tmp_path, text))
