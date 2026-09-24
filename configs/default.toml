@@ -1,0 +1,7 @@
+# Relative paths resolve against this file's directory.
+
+[data]
+cache_dir = "../data/cache"
+
+[market]
+bidding_zone = "DE-LU"
