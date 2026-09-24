@@ -105,3 +105,9 @@ def test_mask_rejects_local_time_index() -> None:
     idx = delivery_index(date(2024, 3, 1), date(2024, 4, 1)).tz_convert("Europe/Berlin")
     with pytest.raises(ValueError, match="UTC"):
         product_mask(Product("base", 2024, "M", 3), idx)
+
+
+def test_mask_rejects_index_with_nat() -> None:
+    idx = pd.DatetimeIndex(["2024-03-01 00:00", pd.NaT], tz="UTC")
+    with pytest.raises(ValueError, match="NaT"):
+        product_mask(Product("base", 2024, "M", 3), idx)

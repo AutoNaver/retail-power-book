@@ -11,7 +11,7 @@ from typing import Literal
 import numpy as np
 import pandas as pd
 
-from rpb.timeutils import is_utc
+from rpb.timeutils import require_utc
 
 LOCAL_TZ = "Europe/Berlin"
 PEAK_START_HOUR = 8
@@ -82,8 +82,7 @@ def product_mask(product: Product, index: pd.DatetimeIndex) -> np.ndarray:
     Peak is Monday-Friday 08:00-20:00 Europe/Berlin. Public holidays are not
     excluded; see open question Q1 in docs/design.md before relying on this.
     """
-    if not is_utc(index):
-        raise ValueError("index must be timezone-aware UTC")
+    require_utc(index)
     in_period = (index >= _local_midnight_utc(product.start)) & (
         index < _local_midnight_utc(product.end)
     )
