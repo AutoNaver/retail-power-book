@@ -144,3 +144,22 @@ def test_week_still_being_published_is_not_cached(tmp_path: Path) -> None:
 def test_invalid_ranges_raise(start: pd.Timestamp, end: pd.Timestamp, tmp_path: Path) -> None:
     with pytest.raises(ValueError):
         load_day_ahead_prices(start, end, tmp_path, fetch=FakeSmard())
+
+
+@pytest.mark.parametrize("utc_hour", ["2025-10-26 00:00", "2025-10-26 01:00"])
+def test_range_can_start_on_either_ambiguous_autumn_hour(utc_hour: str, tmp_path: Path) -> None:
+    # Both are 02:00 Europe/Berlin on 2025-10-26, first at +02:00, then at +01:00.
+    start = pd.Timestamp(utc_hour, tz="UTC").tz_convert("Europe/Berlin")
+    end = berlin("2025-10-26 04:00")
+    prices = load_day_ahead_prices(start, end, tmp_path, fetch=FakeSmard())
+
+    assert prices.index[0] == start
+    assert len(prices) == (end - start) // pd.Timedelta(hours=1)
+    assert prices.notna().all()
+
+
+def test_aggregation_accepts_utc_alias_and_returns_utc() -> None:
+    index = pd.date_range("2025-11-03 00:00", periods=8, freq="15min", tz="Etc/UTC")
+    hourly = quarter_hours_to_hourly(pd.Series(np.arange(8.0), index=index))
+    assert str(hourly.index.tz) == "UTC"
+    np.testing.assert_allclose(hourly.to_numpy(), [1.5, 5.5])

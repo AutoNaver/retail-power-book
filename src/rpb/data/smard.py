@@ -24,6 +24,8 @@ from typing import Any
 import numpy as np
 import pandas as pd
 
+from rpb.timeutils import is_utc
+
 BASE_URL = "https://www.smard.de/app/chart_data"
 DAY_AHEAD_FILTER = 4169
 REGION = "DE-LU"
@@ -53,12 +55,12 @@ def quarter_hours_to_hourly(quarter_hours: pd.Series) -> pd.Series:
 
     An hour with fewer than four valid quarter-hours is NaN, not a partial mean.
     """
-    index = quarter_hours.index
-    if not isinstance(index, pd.DatetimeIndex) or index.tz is None or str(index.tz) != "UTC":
+    if not isinstance(quarter_hours.index, pd.DatetimeIndex) or not is_utc(quarter_hours.index):
         raise ValueError("quarter-hour series must have a timezone-aware UTC DatetimeIndex")
+    index = quarter_hours.index.tz_convert("UTC")
     if (index.minute % 15 != 0).any() or (index.second != 0).any():
         raise ValueError("quarter-hour timestamps must fall on 15-minute boundaries")
-    grouped = quarter_hours.groupby(index.floor("h"))
+    grouped = quarter_hours.set_axis(index).groupby(index.floor("h"))
     hourly = grouped.mean().where(grouped.count() == QUARTER_HOURS_PER_HOUR)
     hourly.index.name = "delivery_start_utc"
     return hourly.rename(quarter_hours.name)
@@ -97,12 +99,12 @@ def load_day_ahead_prices(
     entry per UTC hour in the range; hours SMARD has no complete data for are NaN.
     Weekly files are cached under `cache_dir / "smard"`.
     """
-    for bound in (start, end):
-        if bound.tzinfo is None:
-            raise ValueError("start and end must be timezone-aware")
-        if bound != bound.floor("h"):
-            raise ValueError("start and end must fall on full hours")
+    if start.tzinfo is None or end.tzinfo is None:
+        raise ValueError("start and end must be timezone-aware")
+    # Check alignment in UTC: flooring local wall-clock time fails on the ambiguous autumn hour.
     start, end = start.tz_convert("UTC"), end.tz_convert("UTC")
+    if start != start.floor("h") or end != end.floor("h"):
+        raise ValueError("start and end must fall on full hours")
     if end <= start:
         raise ValueError("end must be after start")
 
