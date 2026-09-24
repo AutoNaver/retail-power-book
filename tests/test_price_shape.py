@@ -84,7 +84,7 @@ def test_missing_cell_raises_on_evaluation() -> None:
     shape = estimate_shape(pd.Series(50.0, index=index))  # January only
     assert shape.loc[2].isna().all()
     evaluate_shape(shape, index)  # January is fine
-    with pytest.raises(ValueError, match="no value"):
+    with pytest.raises(ValueError, match="no finite value"):
         evaluate_shape(shape, delivery_index(date(2024, 2, 1), date(2024, 3, 1)))
 
 
@@ -92,3 +92,20 @@ def test_all_nan_prices_raise() -> None:
     index = delivery_index(date(2024, 1, 1), date(2024, 1, 2))
     with pytest.raises(ValueError, match="no non-NaN"):
         estimate_shape(pd.Series(np.nan, index=index))
+
+
+@pytest.mark.parametrize("bad", [np.inf, -np.inf])
+def test_infinite_prices_raise(bad: float) -> None:
+    index = delivery_index(date(2024, 1, 1), date(2024, 2, 1))
+    prices = pd.Series(50.0, index=index)
+    prices.iloc[10] = bad
+    with pytest.raises(ValueError, match="infinite"):
+        estimate_shape(prices)
+
+
+def test_infinite_shape_cell_raises_on_evaluation() -> None:
+    index = delivery_index(date(2024, 1, 1), date(2024, 2, 1))
+    shape = estimate_shape(pd.Series(50.0, index=index))
+    shape.loc[(1, "weekday", 12)] = np.inf
+    with pytest.raises(ValueError, match="no finite value"):
+        evaluate_shape(shape, index)
