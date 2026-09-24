@@ -48,12 +48,13 @@ def lower_tail(margin_eur: np.ndarray, level: float) -> TailRisk:
 def tail_count(n: int, level: float) -> int:
     """Number of samples in the lower tail: k = ceil(n * (1 - level)), at least 1.
 
-    Computed in exact rational arithmetic on the level as written (0.95 is 19/20),
+    Computed in exact rational arithmetic on the level as written (0.95 is 19/20;
+    NumPy scalars are converted to float first so their repr is a plain number),
     so float error in 1 - level can't move k by one, however large n is.
     """
     if not 0.0 < level < 1.0:
         raise ValueError(f"level must be in (0, 1), got {level}")
-    return max(1, math.ceil(n * (1 - Fraction(repr(level)))))
+    return max(1, math.ceil(n * (1 - Fraction(repr(float(level))))))
 
 
 def margin_summary(margin_eur: np.ndarray, levels: Sequence[float] = (0.95, 0.99)) -> MarginSummary:

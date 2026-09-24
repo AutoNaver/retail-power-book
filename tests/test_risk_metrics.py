@@ -65,3 +65,10 @@ def test_invalid_shape_and_level_raise() -> None:
 )
 def test_tail_count_is_exact(n: int, level: float, k: int) -> None:
     assert tail_count(n, level) == k
+
+
+def test_numpy_scalar_levels_are_accepted() -> None:
+    assert tail_count(100_000_000, np.float64(0.95)) == 5_000_000
+    margin = np.arange(1.0, 21.0)
+    summary = margin_summary(margin, levels=list(np.linspace(0.90, 0.95, 2)))
+    assert [t.var_eur for t in summary.tails] == [2.0, 1.0]
