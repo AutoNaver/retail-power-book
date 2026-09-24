@@ -24,7 +24,7 @@ from typing import Any
 import numpy as np
 import pandas as pd
 
-from rpb.timeutils import is_utc
+from rpb.timeutils import require_utc
 
 BASE_URL = "https://www.smard.de/app/chart_data"
 DAY_AHEAD_FILTER = 4169
@@ -55,8 +55,9 @@ def quarter_hours_to_hourly(quarter_hours: pd.Series) -> pd.Series:
 
     An hour with fewer than four valid quarter-hours is NaN, not a partial mean.
     """
-    if not isinstance(quarter_hours.index, pd.DatetimeIndex) or not is_utc(quarter_hours.index):
-        raise ValueError("quarter-hour series must have a timezone-aware UTC DatetimeIndex")
+    if not isinstance(quarter_hours.index, pd.DatetimeIndex):
+        raise TypeError("quarter-hour series must have a DatetimeIndex")
+    require_utc(quarter_hours.index)
     index = quarter_hours.index.tz_convert("UTC")
     if (index.minute % 15 != 0).any() or (index.second != 0).any():
         raise ValueError("quarter-hour timestamps must fall on 15-minute boundaries")

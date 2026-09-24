@@ -163,3 +163,9 @@ def test_aggregation_accepts_utc_alias_and_returns_utc() -> None:
     hourly = quarter_hours_to_hourly(pd.Series(np.arange(8.0), index=index))
     assert str(hourly.index.tz) == "UTC"
     np.testing.assert_allclose(hourly.to_numpy(), [1.5, 5.5])
+
+
+def test_aggregation_rejects_nat_timestamps() -> None:
+    index = pd.DatetimeIndex(["2025-11-03 00:00", pd.NaT], tz="UTC")
+    with pytest.raises(ValueError, match="NaT"):
+        quarter_hours_to_hourly(pd.Series([1.0, 2.0], index=index))
