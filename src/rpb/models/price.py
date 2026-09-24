@@ -31,12 +31,15 @@ def estimate_shape(price_eur_mwh: pd.Series) -> pd.Series:
 
     Each price is taken relative to the mean price of its local calendar month
     (per year), and the deviations are averaged by (month, day type, local hour).
-    Hours with a NaN price are dropped before estimating. Cells with no data are NaN.
+    Hours with a NaN price are dropped before estimating; infinite prices raise.
+    Cells with no data are NaN.
 
     Returns a Series `shape_eur_mwh` indexed by (month, day_type, hour), with all
     12 x 3 x 24 cells.
     """
     require_utc(price_eur_mwh.index)
+    if np.isinf(price_eur_mwh.to_numpy(dtype=float)).any():
+        raise ValueError("prices contain infinite values")
     prices = price_eur_mwh.dropna()
     if prices.empty:
         raise ValueError("no non-NaN prices to estimate the shape from")
@@ -56,7 +59,7 @@ def evaluate_shape(shape: pd.Series, index: pd.DatetimeIndex) -> np.ndarray:
     Values are re-centred to zero mean within each local calendar month present
     in `index`, so the shape never shifts the monthly level. Pass whole delivery
     months; a partial month is centred on the hours it has.
-    Raises if a needed (month, day type, hour) cell is NaN or missing.
+    Raises if a needed (month, day type, hour) cell is missing, NaN or infinite.
     """
     require_utc(index)
     keys = calendar_keys(index)
@@ -64,9 +67,11 @@ def evaluate_shape(shape: pd.Series, index: pd.DatetimeIndex) -> np.ndarray:
         [keys["month"], keys["day_type"], keys["hour"]], names=SHAPE_LEVELS
     )
     values = shape.reindex(cells).to_numpy(dtype=float)
-    missing = np.isnan(values)
+    missing = ~np.isfinite(values)
     if missing.any():
         examples = sorted(set(cells[missing]))[:3]
-        raise ValueError(f"shape has no value for {missing.sum()} hours, e.g. cells {examples}")
+        raise ValueError(
+            f"shape has no finite value for {missing.sum()} hours, e.g. cells {examples}"
+        )
     month_mean = pd.Series(values).groupby([keys["year"], keys["month"]]).transform("mean")
     return values - month_mean.to_numpy()
