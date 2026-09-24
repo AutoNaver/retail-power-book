@@ -8,6 +8,8 @@ without a licence, so this repository depends on `demandlib` instead of
 committing copies of the data.
 """
 
+import math
+
 import numpy as np
 import pandas as pd
 from demandlib import bdew
@@ -51,6 +53,12 @@ def deterministic_load_mwh(
     index: pd.DatetimeIndex, n_customers: int, annual_mwh_per_customer: float
 ) -> np.ndarray:
     """Load in MWh per hour under normal weather: N_customers · E_annual · shape_h."""
-    if n_customers < 0 or annual_mwh_per_customer < 0:
-        raise ValueError("n_customers and annual_mwh_per_customer must be non-negative")
+    if isinstance(n_customers, bool) or not isinstance(n_customers, int | np.integer):
+        raise TypeError(f"n_customers must be an integer, got {n_customers!r}")
+    if n_customers < 0:
+        raise ValueError(f"n_customers must be non-negative, got {n_customers}")
+    if not math.isfinite(annual_mwh_per_customer) or annual_mwh_per_customer < 0:
+        raise ValueError(
+            f"annual_mwh_per_customer must be finite and non-negative, got {annual_mwh_per_customer}"
+        )
     return n_customers * annual_mwh_per_customer * profile_shape(index)

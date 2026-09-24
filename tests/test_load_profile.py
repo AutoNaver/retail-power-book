@@ -63,3 +63,17 @@ def test_invalid_inputs_raise() -> None:
         profile_shape(index.tz_convert("Europe/Berlin"))
     with pytest.raises(ValueError, match="whole UTC hours"):
         profile_shape(index + pd.Timedelta(minutes=30))
+
+
+@pytest.mark.parametrize("annual", [np.nan, np.inf, -np.inf, -1.0])
+def test_non_finite_or_negative_consumption_raises(annual: float) -> None:
+    index = delivery_index(date(2025, 1, 1), date(2025, 1, 2))
+    with pytest.raises(ValueError, match="finite and non-negative"):
+        deterministic_load_mwh(index, n_customers=100, annual_mwh_per_customer=annual)
+
+
+@pytest.mark.parametrize("customers", [2.5, True, np.nan])
+def test_non_integer_customer_count_raises(customers: object) -> None:
+    index = delivery_index(date(2025, 1, 1), date(2025, 1, 2))
+    with pytest.raises(TypeError, match="integer"):
+        deterministic_load_mwh(index, n_customers=customers, annual_mwh_per_customer=3.5)  # type: ignore[arg-type]
