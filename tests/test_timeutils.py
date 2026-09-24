@@ -31,3 +31,13 @@ def test_require_utc_rejects_nat_with_its_own_message() -> None:
 def test_require_utc_rejects_local_time() -> None:
     with pytest.raises(ValueError, match="UTC"):
         require_utc(pd.date_range("2024-03-01", periods=3, freq="h", tz="Europe/Berlin"))
+
+
+@pytest.mark.parametrize("tz", ["Europe/Berlin", "Europe/London"])
+def test_empty_index_in_local_zone_is_rejected(tz: str) -> None:
+    assert not is_utc(pd.DatetimeIndex([], tz=tz))
+
+
+@pytest.mark.parametrize("tz", ["UTC", "Etc/UTC", "GMT"])
+def test_empty_index_in_utc_zone_is_accepted(tz: str) -> None:
+    assert is_utc(pd.DatetimeIndex([], tz=tz))
