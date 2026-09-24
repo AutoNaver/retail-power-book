@@ -67,15 +67,17 @@ L[s, h] = N_customers · E_annual[s] · shape_h · (1 + ε[s, h])
 
 - `N_customers`: fixed per run. Churn is out of scope.
 - `E_annual[s]`: annual consumption per customer in MWh under normal weather, stochastic across paths.
-- `shape_h`: the BDEW household profile H25, including its dynamisation, summed from quarter-hours to hours and normalised to sum to 1 over each local calendar year, so a delivery month gets its real share of `E_annual`. It comes from the `demandlib` package (MIT). BDEW publishes the profiles without a licence, so we don't commit copies of the data; tests use the profile from the installed package. Holidays passed to the profile are the nationwide ones from `rpb.holidays`.
+- `shape_h`: the BDEW household profile H25, including its dynamisation, summed from quarter-hours to hours and normalised to sum to 1 over each local calendar year, so a delivery month gets its real share of `E_annual`. It comes from the `demandlib` package (MIT). BDEW publishes the profiles without a licence, so we don't commit copies of the data; tests use the profile from the installed package. Holidays passed to the profile are the nationwide ones from `rpb.holidays`. On DST days, `demandlib` is evaluated on the local quarter-hour clock index of the year: the spring day has 92 quarter-hours (no 02:00 hour), and on the autumn day both 02:00 hours carry the profile's 02:00 values. Each UTC hour gets the sum of the four quarter-hours that start in it, and the normalisation is applied after this mapping, so every UTC delivery hour has exactly one value.
 - `ε[s, h]`: the hourly deviation from the profile caused by weather:
 
   ```
   ε[s, h] = g(ΔT[s, h]) + η[s, h]
-  ΔT[s, h] = T[s, h] − T_normal(h)
+  ΔT[s, h] = Σ_i w̃_i(h) · (T_i[s, h] − T_normal,i(h))
   ```
 
-  `T` is an hourly German temperature in °C: a weighted average of DWD stations, with the station list and weights in `configs/`. When some stations are missing an hour, the average uses the reporting stations with their weights rescaled to sum to 1, as long as they carry at least `weather.min_reporting_weight` of the total weight; otherwise the hour is NaN. `T_normal` is its climatological normal for that calendar day and hour in standard time (see below), estimated from history. `g` is a temperature response with `g(0) = 0`, so normal weather reproduces the profile. `η` is a small mean-zero hourly residual.
+  `T_i` is the hourly temperature in °C at DWD station `i`, with the station list and weights in `configs/`. `ΔT` is a German temperature anomaly: each station's deviation from **its own** normal, averaged with weights `w̃_i`. When some stations are missing an hour, `w̃` are the reporting stations' weights rescaled to sum to 1, as long as they carry at least `weather.min_reporting_weight` of the total weight; otherwise the hour is NaN. Taking anomalies per station first means a missing station changes which stations are averaged, but doesn't create a false anomaly: a missing cold station would otherwise make the average look warm.
+
+  `T_normal,i` is fitted per station and per hour of day in standard time (see below), by least squares on history: a level, a linear trend in years, and three annual harmonics. Because of the trend, a weather year's anomaly is measured against that year's own normal, so a historical weather year doesn't carry decades of warming into the delivery year. `g` is a temperature response with `g(0) = 0`, so normal weather reproduces the profile. `η` is a small mean-zero hourly residual.
 
 **Weather scenarios**: each path gets a historical weather year. This keeps the real persistence of cold spells and heat waves, which a simple noise process wouldn't.
 
@@ -84,6 +86,7 @@ The mapping from delivery hours to weather hours uses **standard time, UTC+1 all
 1. Convert its UTC start to UTC+1 and take the calendar month, day and hour.
 2. Take the weather year's observation at the same month, day and hour in UTC+1.
 3. Leap days: a delivery 29 February uses the weather year's 28 February when the weather year has no 29 February. A weather year's 29 February is unused when the delivery year has none.
+4. Multi-year deliveries: the first delivery year (in UTC+1) maps to the chosen weather year, and each following year to the next weather year, so consecutive years stay consecutive.
 
 Every delivery hour gets exactly one weather hour, with nothing dropped, duplicated or filled. Weekdays shift between the two years; that's fine for temperature, because day-type effects live in `shape_h`. Missing weather observations stay NaN, and the load model decides how to handle them.
 
