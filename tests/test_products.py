@@ -91,3 +91,17 @@ def test_invalid_inputs_raise() -> None:
     naive = pd.date_range("2024-01-01", periods=24, freq="h")
     with pytest.raises(ValueError):
         product_mask(Product("base", 2024, "M", 1), naive)
+
+
+def test_mask_accepts_utc_aliases() -> None:
+    idx = delivery_index(date(2024, 3, 1), date(2024, 4, 1))
+    product = Product("peak", 2024, "M", 3)
+    expected = product_mask(product, idx)
+    for alias in ("Etc/UTC", "GMT"):
+        np.testing.assert_array_equal(product_mask(product, idx.tz_convert(alias)), expected)
+
+
+def test_mask_rejects_local_time_index() -> None:
+    idx = delivery_index(date(2024, 3, 1), date(2024, 4, 1)).tz_convert("Europe/Berlin")
+    with pytest.raises(ValueError, match="UTC"):
+        product_mask(Product("base", 2024, "M", 3), idx)
