@@ -1,6 +1,8 @@
 """Settings from configs/*.toml and secrets from the environment."""
 
+import math
 import os
+import re
 import tomllib
 from dataclasses import dataclass
 from pathlib import Path
@@ -29,9 +31,16 @@ class MarketConfig:
 
 
 @dataclass(frozen=True)
+class WeatherConfig:
+    stations: dict[str, float]  # DWD station id (5 digits) -> weight; weights sum to 1
+    min_reporting_weight: float  # share of weight that must report for an hourly average
+
+
+@dataclass(frozen=True)
 class Config:
     data: DataConfig
     market: MarketConfig
+    weather: WeatherConfig
 
 
 def _require(raw: dict[str, Any], dotted_key: str, path: Path) -> Any:
@@ -48,6 +57,29 @@ def _require_str(raw: dict[str, Any], dotted_key: str, path: Path) -> str:
     if not isinstance(value, str):
         raise ConfigError(f"'{dotted_key}' in {path} must be a string, got {value!r}")
     return value
+
+
+def _station_weights(raw: dict[str, Any], path: Path) -> dict[str, float]:
+    stations = _require(raw, "weather.stations", path)
+    if not isinstance(stations, dict) or not stations:
+        raise ConfigError(f"'weather.stations' in {path} must be a non-empty table")
+    weights: dict[str, float] = {}
+    for station_id, weight in stations.items():
+        if not re.fullmatch(r"\d{5}", station_id):
+            raise ConfigError(f"DWD station id must be 5 digits, got {station_id!r} in {path}")
+        if isinstance(weight, bool) or not isinstance(weight, int | float) or not weight > 0:
+            raise ConfigError(f"weight of station {station_id} in {path} must be > 0")
+        weights[station_id] = float(weight)
+    if not math.isclose(sum(weights.values()), 1.0, abs_tol=1e-9):
+        raise ConfigError(f"'weather.stations' weights in {path} must sum to 1")
+    return weights
+
+
+def _min_reporting_weight(raw: dict[str, Any], path: Path) -> float:
+    value = _require(raw, "weather.min_reporting_weight", path)
+    if isinstance(value, bool) or not isinstance(value, int | float) or not 0 < value <= 1:
+        raise ConfigError(f"'weather.min_reporting_weight' in {path} must be in (0, 1]")
+    return float(value)
 
 
 def load_config(path: Path | None = None) -> Config:
@@ -74,6 +106,10 @@ def load_config(path: Path | None = None) -> Config:
     return Config(
         data=DataConfig(cache_dir=cache_dir),
         market=MarketConfig(bidding_zone=bidding_zone),
+        weather=WeatherConfig(
+            stations=_station_weights(raw, path),
+            min_reporting_weight=_min_reporting_weight(raw, path),
+        ),
     )
 
 

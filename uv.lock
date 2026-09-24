@@ -38,6 +38,19 @@ wheels = [
 ]
 
 [[package]]
+name = "demandlib"
+version = "0.2.2"
+source = { registry = "https://pypi.org/simple" }
+dependencies = [
+    { name = "numpy" },
+    { name = "pandas" },
+]
+sdist = { url = "https://files.pythonhosted.org/packages/91/4a/46dab7d7084a3aeb9899279d0a85839f23ad1692e8b7f5f94bdbfe8be8c1/demandlib-0.2.2.tar.gz", hash = "sha256:4f50443626c32b136a5117ab245c293290850079e802674706381b0bc22a9eff", size = 2737123, upload-time = "2025-04-09T09:49:06.615Z" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/f5/68/e02869792f9ef1f3432db8152d20f53858fec7f17d8c642c1b1f93ca7350/demandlib-0.2.2-py3-none-any.whl", hash = "sha256:52c63aeb23a639d9558d6fe7bd63a70a6b193e59beea6787e80f9acd9464e297", size = 2814688, upload-time = "2025-04-09T09:49:03.553Z" },
+]
+
+[[package]]
 name = "distlib"
 version = "0.4.3"
 source = { registry = "https://pypi.org/simple" }
@@ -535,6 +548,7 @@ name = "retail-power-book"
 version = "0.0.1"
 source = { editable = "." }
 dependencies = [
+    { name = "demandlib" },
     { name = "numpy" },
     { name = "pandas" },
     { name = "python-dotenv" },
@@ -551,6 +565,7 @@ dev = [
 
 [package.metadata]
 requires-dist = [
+    { name = "demandlib", specifier = ">=0.2.2" },
     { name = "numpy", specifier = ">=2.5.3" },
     { name = "pandas", specifier = ">=3.0.6" },
     { name = "python-dotenv", specifier = ">=1.2.3" },
