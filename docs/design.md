@@ -75,7 +75,7 @@ L[s, h] = N_customers · E_annual[s] · shape_h · (1 + ε[s, h])
   ΔT[s, h] = T[s, h] − T_normal(h)
   ```
 
-  `T` is an hourly German temperature in °C: a weighted average of DWD stations, with the station list and weights in `configs/`. `T_normal` is its climatological normal for that calendar day and hour in standard time (see below), estimated from history. `g` is a temperature response with `g(0) = 0`, so normal weather reproduces the profile. `η` is a small mean-zero hourly residual.
+  `T` is an hourly German temperature in °C: a weighted average of DWD stations, with the station list and weights in `configs/`. When some stations are missing an hour, the average uses the reporting stations with their weights rescaled to sum to 1, as long as they carry at least `weather.min_reporting_weight` of the total weight; otherwise the hour is NaN. `T_normal` is its climatological normal for that calendar day and hour in standard time (see below), estimated from history. `g` is a temperature response with `g(0) = 0`, so normal weather reproduces the profile. `η` is a small mean-zero hourly residual.
 
 **Weather scenarios**: each path gets a historical weather year. This keeps the real persistence of cold spells and heat waves, which a simple noise process wouldn't.
 
