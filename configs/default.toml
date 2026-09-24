@@ -5,3 +5,24 @@ cache_dir = "../data/cache"
 
 [market]
 bidding_zone = "DE-LU"
+
+[weather]
+# DWD hourly temperature stations (id -> weight) for the German temperature in the
+# load model. Ten large-city stations with equal weights for now; population
+# weighting is an open choice. Station list: DWD TU_Stundenwerte_Beschreibung_Stationen.txt
+#
+# When stations are missing an hour, the average uses the reporting stations with
+# rescaled weights, if they carry at least this share of the total weight.
+min_reporting_weight = 0.8
+
+[weather.stations]
+"01975" = 0.1  # Hamburg-Fuhlsbüttel
+"00433" = 0.1  # Berlin-Tempelhof
+"02014" = 0.1  # Hannover
+"02667" = 0.1  # Köln/Bonn
+"01420" = 0.1  # Frankfurt/Main
+"04931" = 0.1  # Stuttgart-Echterdingen
+"03379" = 0.1  # München-Stadt
+"03668" = 0.1  # Nürnberg
+"02932" = 0.1  # Leipzig/Halle
+"01048" = 0.1  # Dresden-Klotzsche
