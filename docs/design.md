@@ -39,6 +39,8 @@ data/  ──►  models/load.py   ──► load paths   L[s, h]  (MWh)      �
                                        risk/metrics.py, risk/scenarios.py ◄┘  margin distribution
 ```
 
+`data/` holds the loaders: SMARD day-ahead prices and DWD station temperatures.
+
 Each stage only communicates through the array and frame contracts in section 3. No stage reaches into another's internals.
 
 ## 3. Data contracts
@@ -55,7 +57,7 @@ Each stage only communicates through the array and frame contracts in section 3.
 
 ## 4. Load model (`models/load.py`)
 
-The book is residential. Below 100,000 kWh per year, German household customers are settled against a standard load profile (SLP), not against metered hourly values.
+The book is residential and modelled as **smart-metered**: the supplier buys each customer's actual hourly consumption at the day-ahead price, so hourly deviations from the profile are the supplier's risk. (With standard-load-profile settlement, the supplier would deliver the synthetic profile and settle the difference later at a regulated price; we don't model that case.)
 
 Structure:
 
@@ -64,11 +66,28 @@ L[s, h] = N_customers · E_annual[s] · shape_h · (1 + ε[s, h])
 ```
 
 - `N_customers`: fixed per run. Churn is out of scope.
-- `E_annual[s]`: annual consumption per customer in MWh, stochastic across paths. This is the main volume risk for an SLP book.
-- `shape_h`: a normalised profile that sums to 1 over the delivery year, built from the standard household profile including its dynamisation factor. The profile source must be citable and committed as a fixture.
-- `ε[s, h]`: optional hourly deviation, zero in the baseline (see open question Q2).
+- `E_annual[s]`: annual consumption per customer in MWh under normal weather, stochastic across paths.
+- `shape_h`: the BDEW household profile H25, including its dynamisation, summed from quarter-hours to hours and normalised to sum to 1 over each local calendar year, so a delivery month gets its real share of `E_annual`. It comes from the `demandlib` package (MIT). BDEW publishes the profiles without a licence, so we don't commit copies of the data; tests use the profile from the installed package. Holidays passed to the profile are the nationwide ones from `rpb.holidays`.
+- `ε[s, h]`: the hourly deviation from the profile caused by weather:
 
-Functions accept a `numpy.random.Generator`. A deterministic path (no noise) must reproduce `N_customers · E_annual · shape_h` exactly, and tests check that.
+  ```
+  ε[s, h] = g(ΔT[s, h]) + η[s, h]
+  ΔT[s, h] = T[s, h] − T_normal(h)
+  ```
+
+  `T` is an hourly German temperature in °C: a weighted average of DWD stations, with the station list and weights in `configs/`. When some stations are missing an hour, the average uses the reporting stations with their weights rescaled to sum to 1, as long as they carry at least `weather.min_reporting_weight` of the total weight; otherwise the hour is NaN. `T_normal` is its climatological normal for that calendar day and hour in standard time (see below), estimated from history. `g` is a temperature response with `g(0) = 0`, so normal weather reproduces the profile. `η` is a small mean-zero hourly residual.
+
+**Weather scenarios**: each path gets a historical weather year. This keeps the real persistence of cold spells and heat waves, which a simple noise process wouldn't.
+
+The mapping from delivery hours to weather hours uses **standard time, UTC+1 all year (MEZ, no DST)**, not local clock time. In standard time every day has exactly 24 hours, so there are no DST gaps or repeated hours, and it tracks the sun, which suits temperature. For each delivery hour:
+
+1. Convert its UTC start to UTC+1 and take the calendar month, day and hour.
+2. Take the weather year's observation at the same month, day and hour in UTC+1.
+3. Leap days: a delivery 29 February uses the weather year's 28 February when the weather year has no 29 February. A weather year's 29 February is unused when the delivery year has none.
+
+Every delivery hour gets exactly one weather hour, with nothing dropped, duplicated or filled. Weekdays shift between the two years; that's fine for temperature, because day-type effects live in `shape_h`. Missing weather observations stay NaN, and the load model decides how to handle them.
+
+Functions accept a `numpy.random.Generator`. A deterministic path (normal weather, no residual) must reproduce `N_customers · E_annual · shape_h` exactly, and tests check that.
 
 ## 5. Price model (`models/price.py`)
 
@@ -113,7 +132,8 @@ Reference objective (for tests and comparison): minimum variance of `margin` acr
 ## 8. Open questions
 
 - **Q1 Peak and holidays.** Does the EEX Phelix-DE Peak product exclude German public holidays that fall on weekdays? Our current understanding is that it doesn't. Check the EEX contract specification before relying on this and cite the document in the calendar module.
-- **Q2 Hourly volume noise.** For an SLP book, the supplier delivers the synthetic profile, and the deviation from metered consumption is settled after the fact as Mehr-/Mindermengen at a regulated price. Should `ε` stay zero, with volume risk only in `E_annual` and settlement as a separate cash flow? Or should we model a smart-metered book where `ε` is weather-driven?
+- **Q2 Hourly volume** (decided 2026-09-24). The book is smart-metered: `ε` is non-zero, driven by temperature from DWD, and settled at the day-ahead price. See section 4.
 - **Q3 Product set.** Hedge a cascade (months for the front quarter, quarters beyond) or solve with overlapping products under regularisation? This is the maintainer's decision.
-- **Q4 Load–price dependence.** With `ε = 0`, load and price are linked only through `E_annual` and the price level. What correlation between them do we assume, and on what evidence?
+- **Q4 Load–price dependence.** Load depends on temperature through `ε`. The price model has no weather term yet, so load and price are currently linked only through `E_annual` and the price level. Do we condition the price residual on the same weather year, and how do we separate weather from fuel-price effects in the price history?
 - **Q5 Tariff.** Is `p_tariff` the energy component only (current assumption) or the full end-customer price minus grid fees, levies and taxes?
+- **Q6 Temperature response calibration.** We have no metered household data to estimate `g`. Candidates: the temperature sensitivity of total German load (SMARD), scaled to the household share; published household sensitivities; or a stated assumption for scenario analysis. Until this is decided, `g` is a parameter, not an estimate.

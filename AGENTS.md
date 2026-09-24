@@ -49,7 +49,7 @@ docs/
 - Prices can be negative. Never clip, floor or log-transform prices.
 - Time: store timezone-aware UTC. Convert to Europe/Berlin only for display and calendar features. DST days have 23 and 25 hours. Never assume 24 hours per day or 8,760 hours per year.
 - Peak: Monday–Friday 08:00–20:00 Europe/Berlin. Check holiday treatment against the EEX contract specification before relying on it.
-- Data: SMARD (CC BY 4.0 — credit it) and ENTSO-E (token in `ENTSOE_API_TOKEN`).
+- Data: SMARD (CC BY 4.0 — credit it), ENTSO-E (token in `ENTSOE_API_TOKEN`) and DWD station observations (CC BY 4.0 — credit it). BDEW load profiles come from the `demandlib` package; don't commit copies of them.
 
 ## Scope
 
