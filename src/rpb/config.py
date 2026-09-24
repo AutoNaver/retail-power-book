@@ -43,8 +43,15 @@ def _require(raw: dict[str, Any], dotted_key: str, path: Path) -> Any:
 
 
 def load_config(path: Path | None = None) -> Config:
-    """Load a TOML config; relative paths resolve against the file's directory."""
+    """Load a TOML config; relative paths resolve against the file's directory.
+
+    The default is `configs/default.toml` in the source checkout. The project is run
+    from a checkout (`uv sync`), not installed as a wheel; outside a checkout, pass
+    `path` explicitly.
+    """
     path = (path or DEFAULT_CONFIG_PATH).resolve()
+    if not path.is_file():
+        raise ConfigError(f"config file not found: {path}; pass the path to a config explicitly")
     with path.open("rb") as f:
         raw = tomllib.load(f)
     cache_dir = Path(_require(raw, "data.cache_dir", path))

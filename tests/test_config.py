@@ -68,3 +68,8 @@ def test_token_from_env_file(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) ->
     env_file = tmp_path / ".env"
     env_file.write_text(f"{TOKEN_VAR}=from-file\n")
     assert entsoe_token(env_file) == "from-file"
+
+
+def test_missing_config_file_raises_config_error(tmp_path: Path) -> None:
+    with pytest.raises(ConfigError, match="not found"):
+        load_config(tmp_path / "absent.toml")
