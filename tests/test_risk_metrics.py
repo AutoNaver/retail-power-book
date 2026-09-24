@@ -3,7 +3,7 @@ from statistics import NormalDist
 import numpy as np
 import pytest
 
-from rpb.risk.metrics import lower_tail, margin_summary
+from rpb.risk.metrics import lower_tail, margin_summary, tail_count
 
 
 @pytest.mark.parametrize("level", [0.95, 0.99])
@@ -50,3 +50,18 @@ def test_invalid_shape_and_level_raise() -> None:
         margin_summary(np.ones((2, 3)))
     with pytest.raises(ValueError):
         lower_tail(np.arange(10.0), level=1.0)
+
+
+@pytest.mark.parametrize(
+    ("n", "level", "k"),
+    [
+        (20, 0.95, 1),
+        (20, 0.90, 2),
+        (1_000, 0.99, 10),
+        (1_001, 0.99, 11),  # 10.01 rounds up
+        (100_000_000, 0.95, 5_000_000),  # float: 1e8 * (1 - 0.95) = 5000000.000000005
+        (10, 0.999, 1),
+    ],
+)
+def test_tail_count_is_exact(n: int, level: float, k: int) -> None:
+    assert tail_count(n, level) == k

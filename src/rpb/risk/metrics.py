@@ -8,6 +8,7 @@ without flipping the sign into a "loss".
 import math
 from collections.abc import Sequence
 from dataclasses import dataclass
+from fractions import Fraction
 
 import numpy as np
 
@@ -39,13 +40,20 @@ def lower_tail(margin_eur: np.ndarray, level: float) -> TailRisk:
     k = ceil(n * (1 - level)). ES is the mean of all samples at or below it.
     """
     x = _validated(margin_eur)
+    k = tail_count(x.size, level)
+    var = np.partition(x, k - 1)[k - 1]
+    return TailRisk(level=level, var_eur=float(var), es_eur=float(x[x <= var].mean()))
+
+
+def tail_count(n: int, level: float) -> int:
+    """Number of samples in the lower tail: k = ceil(n * (1 - level)), at least 1.
+
+    Computed in exact rational arithmetic on the level as written (0.95 is 19/20),
+    so float error in 1 - level can't move k by one, however large n is.
+    """
     if not 0.0 < level < 1.0:
         raise ValueError(f"level must be in (0, 1), got {level}")
-    ordered = np.sort(x)
-    # The small tolerance stops float noise (1 - 0.95 = 0.0500...04) from moving k up by one.
-    k = max(1, math.ceil(x.size * (1.0 - level) - 1e-9))
-    var = ordered[k - 1]
-    return TailRisk(level=level, var_eur=float(var), es_eur=float(x[x <= var].mean()))
+    return max(1, math.ceil(n * (1 - Fraction(repr(level)))))
 
 
 def margin_summary(margin_eur: np.ndarray, levels: Sequence[float] = (0.95, 0.99)) -> MarginSummary:
