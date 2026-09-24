@@ -11,6 +11,7 @@ from dotenv import dotenv_values
 REPO_ROOT = Path(__file__).resolve().parents[2]
 DEFAULT_CONFIG_PATH = REPO_ROOT / "configs" / "default.toml"
 DEFAULT_ENV_FILE = REPO_ROOT / ".env"
+SUPPORTED_BIDDING_ZONES = ("DE-LU",)  # scope: see AGENTS.md, Domain rules
 
 
 class ConfigError(Exception):
@@ -42,6 +43,13 @@ def _require(raw: dict[str, Any], dotted_key: str, path: Path) -> Any:
     return value
 
 
+def _require_str(raw: dict[str, Any], dotted_key: str, path: Path) -> str:
+    value = _require(raw, dotted_key, path)
+    if not isinstance(value, str):
+        raise ConfigError(f"'{dotted_key}' in {path} must be a string, got {value!r}")
+    return value
+
+
 def load_config(path: Path | None = None) -> Config:
     """Load a TOML config; relative paths resolve against the file's directory.
 
@@ -54,12 +62,18 @@ def load_config(path: Path | None = None) -> Config:
         raise ConfigError(f"config file not found: {path}; pass the path to a config explicitly")
     with path.open("rb") as f:
         raw = tomllib.load(f)
-    cache_dir = Path(_require(raw, "data.cache_dir", path))
+    cache_dir = Path(_require_str(raw, "data.cache_dir", path))
     if not cache_dir.is_absolute():
         cache_dir = (path.parent / cache_dir).resolve()
+    bidding_zone = _require_str(raw, "market.bidding_zone", path)
+    if bidding_zone not in SUPPORTED_BIDDING_ZONES:
+        raise ConfigError(
+            f"unsupported bidding zone {bidding_zone!r} in {path}; "
+            f"supported: {', '.join(SUPPORTED_BIDDING_ZONES)}"
+        )
     return Config(
         data=DataConfig(cache_dir=cache_dir),
-        market=MarketConfig(bidding_zone=str(_require(raw, "market.bidding_zone", path))),
+        market=MarketConfig(bidding_zone=bidding_zone),
     )
 
 

@@ -73,3 +73,18 @@ def test_token_from_env_file(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) ->
 def test_missing_config_file_raises_config_error(tmp_path: Path) -> None:
     with pytest.raises(ConfigError, match="not found"):
         load_config(tmp_path / "absent.toml")
+
+
+@pytest.mark.parametrize(
+    ("zone", "message"), [('"FR"', "unsupported"), ('"de-lu"', "unsupported"), ("1", "string")]
+)
+def test_invalid_bidding_zone_raises(tmp_path: Path, zone: str, message: str) -> None:
+    path = write_config(tmp_path, f'[data]\ncache_dir = "c"\n[market]\nbidding_zone = {zone}\n')
+    with pytest.raises(ConfigError, match=message):
+        load_config(path)
+
+
+def test_non_string_cache_dir_raises(tmp_path: Path) -> None:
+    path = write_config(tmp_path, '[data]\ncache_dir = 3\n[market]\nbidding_zone = "DE-LU"\n')
+    with pytest.raises(ConfigError, match="data.cache_dir"):
+        load_config(path)
