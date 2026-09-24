@@ -169,3 +169,18 @@ def test_aggregation_rejects_nat_timestamps() -> None:
     index = pd.DatetimeIndex(["2025-11-03 00:00", pd.NaT], tz="UTC")
     with pytest.raises(ValueError, match="NaT"):
         quarter_hours_to_hourly(pd.Series([1.0, 2.0], index=index))
+
+
+def test_hour_with_no_rows_is_nan_not_dropped() -> None:
+    index = pd.date_range("2025-11-03 00:00", periods=12, freq="15min", tz="UTC")
+    series = pd.Series(np.arange(12.0), index=index).drop(index[4:8])  # all of hour 1
+    hourly = quarter_hours_to_hourly(series)
+
+    expected_index = pd.date_range("2025-11-03 00:00", periods=3, freq="h", tz="UTC")
+    assert hourly.index.equals(expected_index)
+    np.testing.assert_array_equal(hourly.to_numpy(), [1.5, np.nan, 9.5])
+
+
+def test_empty_quarter_hours_give_empty_hourly() -> None:
+    empty = pd.Series([], index=pd.DatetimeIndex([], tz="UTC"), dtype=float)
+    assert quarter_hours_to_hourly(empty).empty

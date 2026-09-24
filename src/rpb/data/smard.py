@@ -53,7 +53,9 @@ def parse_chart_data(payload: dict[str, Any], name: str = "price_eur_mwh") -> pd
 def quarter_hours_to_hourly(quarter_hours: pd.Series) -> pd.Series:
     """Hourly mean of four quarter-hour prices: the price of a flat 1 MW hour.
 
-    An hour with fewer than four valid quarter-hours is NaN, not a partial mean.
+    The result covers every hour from the first to the last input hour. An hour with
+    fewer than four valid quarter-hours, including one with no rows at all, is NaN,
+    not a partial mean or a gap in the index.
     """
     if not isinstance(quarter_hours.index, pd.DatetimeIndex):
         raise TypeError("quarter-hour series must have a DatetimeIndex")
@@ -63,6 +65,8 @@ def quarter_hours_to_hourly(quarter_hours: pd.Series) -> pd.Series:
         raise ValueError("quarter-hour timestamps must fall on 15-minute boundaries")
     grouped = quarter_hours.set_axis(index).groupby(index.floor("h"))
     hourly = grouped.mean().where(grouped.count() == QUARTER_HOURS_PER_HOUR)
+    if len(hourly):
+        hourly = hourly.reindex(pd.date_range(hourly.index[0], hourly.index[-1], freq="h"))
     hourly.index.name = "delivery_start_utc"
     return hourly.rename(quarter_hours.name)
 
